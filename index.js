@@ -15,7 +15,6 @@ function generateTrackingId() {
   return `${prefix}-${date}-${random}`;
 }
 
-
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -106,7 +105,7 @@ async function run() {
               currency: "USD",
               unit_amount: amount,
               product_data: {
-                name: `Please pay for: ${paymentInfo.parcelName}`
+                name: `Please pay for: ${paymentInfo.parcelName}`,
               },
             },
             quantity: 1,
@@ -116,12 +115,15 @@ async function run() {
         mode: "payment",
         metadata: {
           parcelId: paymentInfo.parcelId,
-          parcelName: paymentInfo.parcelName
+          parcelName: paymentInfo.parcelName,
+          senderName: paymentInfo.senderName,
+          senderAddress: paymentInfo.senderAddress
         },
         success_url: `${process.env.STRIPE_SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.STRIPE_SITE_DOMAIN}/payment-cancelled`,
       });
       console.log("Stripe session created:", session);
+      console.log("Payment Info:", paymentInfo);
       res.send({ url: session.url });
     });
     // ===============================================================================
@@ -135,6 +137,20 @@ async function run() {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       console.log("Retrieved Stripe session:", session);
 
+      const transactionId = session.payment_intent;
+      const query = { transactionId: transactionId };
+      const existingPayment = await paymentsCollection.findOne(query);
+
+      if (existingPayment) {
+        console.log("Payment already recorded in database:", existingPayment);
+        return res.send({
+          success: true,
+          message: "Payment already processed",
+          transactionId,
+          trackingId: existingPayment.trackingId,
+        });
+      }
+
       const trackingId = generateTrackingId();
 
       if (session.payment_status === "paid") {
@@ -143,24 +159,27 @@ async function run() {
         const update = {
           $set: {
             paymentStatus: "paid",
-            trackingId: trackingId
+            trackingId: trackingId,
           },
         };
         const result = await parcelsCollection.updateOne(query, update);
         console.log("Updated parcel payment status in database:", result);
 
         const payment = {
+          senderName: session.metadata.senderName,
+          senderAddress: session.metadata.senderAddress,
+          customerEmail: session.customer_email,
+          parcelName: session.metadata.parcelName,
           amount: session.amount_total / 100,
           currency: session.currency,
-          customerEmail: session.customer_email,
           parcelId: session.metadata.parcelId,
-          parcelName: session.metadata.parcelName,
           transactionId: session.payment_intent,
           paymentStatus: session.payment_status,
-          paidDate: new Date()
-
+          paidDate: new Date(),
+          trackingId: trackingId,
         };
 
+        // const resultPayment = await paymentsCollection.insertOne(payment);
         if (session.payment_status === "paid") {
           const resultPayment = await paymentsCollection.insertOne(payment);
           res.send({
@@ -168,13 +187,26 @@ async function run() {
             modifyParcel: result,
             trackingId: trackingId,
             transactionId: session.payment_intent,
-            paymentInfo: resultPayment
+            paymentInfo: resultPayment,
+            parcelName: session.metadata.parcelName,
           });
         }
+          // res.send(resultPayment)
+      }
+      // res.send({success: false });
+    });
+
+    app.get('/payment-history', async (req, res)=>{
+      const email = req.query.email;
+      const query = {};
+      if(email){
+        query.customerEmail = email;
       }
 
-      res.send({ success: false });
-    });
+      const cursor = paymentsCollection.find(query).sort({paidDate: -1});
+      const result = await cursor.toArray();
+      res.send(result);
+    })
 
     //=============================================================================
     // Ping!
