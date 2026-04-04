@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const nodemailer = require("nodemailer");
 const app = express();
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -117,7 +118,7 @@ async function run() {
           parcelId: paymentInfo.parcelId,
           parcelName: paymentInfo.parcelName,
           senderName: paymentInfo.senderName,
-          senderAddress: paymentInfo.senderAddress
+          senderAddress: paymentInfo.senderAddress,
         },
         success_url: `${process.env.STRIPE_SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.STRIPE_SITE_DOMAIN}/payment-cancelled`,
@@ -191,24 +192,80 @@ async function run() {
             parcelName: session.metadata.parcelName,
           });
         }
-          // res.send(resultPayment)
+        // res.send(resultPayment)
       }
       // res.send({success: false });
     });
 
-    app.get('/payment-history', async (req, res)=>{
+    app.get("/payment-history", async (req, res) => {
       const email = req.query.email;
       const query = {};
-      if(email){
+      if (email) {
         query.customerEmail = email;
       }
 
-      const cursor = paymentsCollection.find(query).sort({paidDate: -1});
+      const cursor = paymentsCollection.find(query).sort({ paidDate: -1 });
       const result = await cursor.toArray();
       res.send(result);
-    })
+    });
 
     //=============================================================================
+
+    const otpStore = {};
+    // nodemailer ==========
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL, // তোমার gmail
+        pass: process.env.EMAIL_PASS, // gmail app password
+      },
+    });
+
+    // Send OTP
+    app.post("/send-otp", async (req, res) => {
+      const { email } = req.body;
+
+      if (!email) return res.status(400).send({ message: "Email is required" });
+
+      const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit
+      otpStore[email] = {
+        code: otp,
+        expire: Date.now() + 5 * 60 * 1000, // 5 min
+      };
+
+      try {
+        await transporter.sendMail({
+          from: process.env.EMAIL,
+          to: email,
+          subject: "Your OTP Code",
+          html: `<h2>Your OTP Code</h2><h1>${otp}</h1><p>This code will expire in 5 minutes</p>`,
+        });
+
+        console.log("OTP sent to:", email, otp); // debug
+        res.send({ success: true, message: "OTP sent" });
+      } catch (err) {
+        console.log(err);
+        res.status(500).send({ message: "Failed to send OTP" });
+      }
+    });
+
+    // Verify OTP
+    app.post("/verify-otp", (req, res) => {
+      const { email, otp } = req.body;
+      const stored = otpStore[email];
+
+      if (!stored) return res.status(400).send({ message: "No OTP found" });
+      if (stored.expire < Date.now())
+        return res.status(400).send({ message: "OTP expired" });
+      if (stored.code !== Number(otp))
+        return res.status(400).send({ message: "Invalid OTP" });
+
+      delete otpStore[email];
+      res.send({ success: true, message: "OTP Verified" });
+    });
+
+    //=============================================================================
+
     // Ping!
     await client.db("admin").command({ ping: 1 });
     console.log(
