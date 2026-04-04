@@ -7,6 +7,13 @@ const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
+// fire-base admin
+const admin = require("firebase-admin");
+const serviceAccount = require("./speedy-parcel-firebase-adminsdk.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 // Tracking ID generator
 const crypto = require("crypto");
 function generateTrackingId() {
@@ -19,6 +26,26 @@ function generateTrackingId() {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+const verifyFBToken = async (req, res, next) => {
+  console.log("headers in the middleware", req.headers.authorization);
+  const tokenFB = req.headers.authorization;
+  if (!tokenFB) {
+    return res.status(401).send({ massage: "do not your token FB" });
+  }
+
+  try {
+    const idToken = tokenFB.split(" ")[1];
+    // console.log('verifyToken', idToken)
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    // console.log("decoded in the token", decoded)
+    req.decoded_email = decoded.email;
+  } catch (err) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  next();
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.w0nmtjl.mongodb.net/?appName=SpeedyParcel`;
 
@@ -40,6 +67,38 @@ async function run() {
     const parcelsCollection = database.collection("parcels");
     const reviewsCollection = database.collection("reviews");
     const paymentsCollection = database.collection("payments");
+
+    // ============================================================================
+    // users related apis
+    app.get("/users", async (req, res) => {
+      const query = {};
+      const { email } = req.query;
+
+      if (email) {
+        query.email = email; // ✅ correct field
+      }
+
+      const options = { sort: { createdAt: -1 } };
+      const result = await usersCollection.find(query, options).toArray();
+
+      res.send(result);
+    });
+
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      user.role = "user";
+      user.createdAt = new Date();
+
+      const email = user.email;
+      const existingUser = await usersCollection.findOne({ email });
+      if (existingUser) {
+        return res.send({ message: "User already exists" });
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
     // =============================================================================
     // parcel api
     app.get("/parcels", async (req, res) => {
@@ -50,8 +109,8 @@ async function run() {
       }
       const options = { sort: { createdAt: -1 } };
       const cursor = parcelsCollection.find(query, options);
-      const parcels = await cursor.toArray();
-      res.send(parcels);
+      const result = await cursor.toArray();
+      res.send(result);
     });
 
     app.get("/parcels/:id", async (req, res) => {
@@ -127,7 +186,7 @@ async function run() {
       console.log("Payment Info:", paymentInfo);
       res.send({ url: session.url });
     });
-    // ===============================================================================
+
     // payment check api
     app.patch("/payment-check", async (req, res) => {
       const sessionId = req.query.session_id;
@@ -197,11 +256,18 @@ async function run() {
       // res.send({success: false });
     });
 
-    app.get("/payment-history", async (req, res) => {
+    app.get("/payment-history", verifyFBToken, async (req, res) => {
       const email = req.query.email;
       const query = {};
+
+      console.log("headers", req.headers);
+
       if (email) {
         query.customerEmail = email;
+
+        if (email !== req.decoded_email) {
+          return res.status(403).send({ message: "forbidden access" });
+        }
       }
 
       const cursor = paymentsCollection.find(query).sort({ paidDate: -1 });
@@ -210,7 +276,7 @@ async function run() {
     });
 
     //=============================================================================
-
+    // OTP related apis
     const otpStore = {};
     // nodemailer ==========
     const transporter = nodemailer.createTransport({
