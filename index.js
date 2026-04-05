@@ -28,7 +28,7 @@ app.use(cors());
 app.use(express.json());
 
 const verifyFBToken = async (req, res, next) => {
-  console.log("headers in the middleware", req.headers.authorization);
+  // console.log("headers in the middleware", req.headers.authorization);
   const tokenFB = req.headers.authorization;
   if (!tokenFB) {
     return res.status(401).send({ massage: "do not your token FB" });
@@ -67,6 +67,7 @@ async function run() {
     const parcelsCollection = database.collection("parcels");
     const reviewsCollection = database.collection("reviews");
     const paymentsCollection = database.collection("payments");
+    const ridersCollection = database.collection("riders");
 
     // ============================================================================
     // users related apis
@@ -134,6 +135,63 @@ async function run() {
       res.send(result);
     });
     // ==============================================================================
+    // riders api
+    app.get("/riders", async (req, res) => {
+      const query = {};
+      const { email, status } = req.query;
+
+      if (email) {
+        query.riderEmail = email;
+      }
+
+      if (status) {
+        query.status = status; // e.g. pending, approved
+      }
+
+      const options = { sort: { createdAt: -1 } };
+
+      const result = await ridersCollection.find(query, options).toArray();
+      res.send(result);
+    });
+
+    app.post("/riders", async (req, res) => {
+      const rider = req.body;
+      rider.status = "pending";
+      rider.createdAt = new Date();
+      const result = await ridersCollection.insertOne(rider);
+      res.send(result);
+    });
+
+    app.patch("/riders/:id", verifyFBToken, async (req, res) => {
+      const status = req.body.status;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: status,
+        },
+      };
+      const result = await ridersCollection.updateOne(query, updateDoc);
+      if (status === "approved") {
+        const email = req.body.email;
+        const userQuery = { email };
+        const updateUser = {
+          $set: {
+            role: 'rider'
+          }
+        }
+        const userResult = await usersCollection.updateOne(userQuery, updateUser)
+      }
+      res.send(result);
+    });
+
+    app.delete("/riders/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await ridersCollection.deleteOne(query);
+      res.send(result);
+    });
+    // ==============================================================================
     // review api
     app.get("/reviews", async (req, res) => {
       const query = {};
@@ -178,6 +236,7 @@ async function run() {
           parcelName: paymentInfo.parcelName,
           senderName: paymentInfo.senderName,
           senderAddress: paymentInfo.senderAddress,
+          senderPhoto: paymentInfo.senderPhoto,
         },
         success_url: `${process.env.STRIPE_SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.STRIPE_SITE_DOMAIN}/payment-cancelled`,
@@ -228,6 +287,7 @@ async function run() {
         const payment = {
           senderName: session.metadata.senderName,
           senderAddress: session.metadata.senderAddress,
+          senderPhoto: session.metadata.senderPhoto,
           customerEmail: session.customer_email,
           parcelName: session.metadata.parcelName,
           amount: session.amount_total / 100,
