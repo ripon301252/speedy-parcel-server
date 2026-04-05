@@ -5,7 +5,7 @@ const nodemailer = require("nodemailer");
 const app = express();
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const stripe = require("stripe")('./speedy-parcel-firebase-adminsdk.json');
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // fire-base admin
 const admin = require("firebase-admin");
@@ -153,7 +153,7 @@ async function run() {
     });
     // ============================================================================
     // stripe payment api
-    app.post("/stripe-payment", async (req, res) => {
+    app.post("/stripe-payment", verifyFBToken, async (req, res) => {
       const paymentInfo = req.body;
 
       const amount = parseInt(paymentInfo.cost) * 100;
