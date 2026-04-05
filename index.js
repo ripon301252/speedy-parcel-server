@@ -5,7 +5,7 @@ const nodemailer = require("nodemailer");
 const app = express();
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")('./speedy-parcel-firebase-adminsdk.json');
 
 // fire-base admin
 const admin = require("firebase-admin");

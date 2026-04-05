@@ -1,3 +1,4 @@
 node_modules
 .env
 sum.js
+speedy-parcel-firebase-adminsdk.json
