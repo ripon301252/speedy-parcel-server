@@ -71,7 +71,7 @@ async function run() {
 
     // ============================================================================
     // users related apis
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyFBToken, async (req, res) => {
       const query = {};
       const { email } = req.query;
 
@@ -158,31 +158,115 @@ async function run() {
       const rider = req.body;
       rider.status = "pending";
       rider.createdAt = new Date();
+
+      const email = rider.riderEmail;
+      const existingRider = await ridersCollection.findOne({ riderEmail: email,});
+      if (existingRider) {
+        return res.send({ message: "User already exists" });
+      }
+
       const result = await ridersCollection.insertOne(rider);
       res.send(result);
     });
 
+    // app.post("/riders", async (req, res) => {
+    //   try {
+    //     const rider = req.body;
+    //     rider.status = "pending";
+    //     rider.createdAt = new Date();
+
+    //     const email = rider.riderEmail;
+
+    //     // 🔥 check in ridersCollection (not usersCollection)
+    //     const existingRider = await ridersCollection.findOne({
+    //       riderEmail: email,
+    //     });
+
+    //     if (existingRider) {
+    //       return res.send({ message: "Rider already applied" });
+    //     }
+
+    //     const result = await ridersCollection.insertOne(rider);
+    //     res.send(result);
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send({ error: "Something went wrong" });
+    //   }
+    // });
+
+    // app.patch("/riders/:id", verifyFBToken, async (req, res) => {
+    //   const status = req.body.status;
+    //   const id = req.params.id;
+    //   const query = { _id: new ObjectId(id) };
+    //   const updateDoc = {
+    //     $set: {
+    //       status: status,
+    //     },
+    //   };
+    //   const result = await ridersCollection.updateOne(query, updateDoc);
+
+    //   if (status === "approved") {
+    //     const email = req.body.email;
+    //     const userQuery = { email };
+    //     const updateUser = {
+    //       $set: {
+    //         role: "rider",
+    //       },
+    //     };
+    //     const userResult = await usersCollection.updateOne(
+    //       userQuery,
+    //       updateUser,
+    //     );
+    //   }
+
+    //   if (status === "rejected") {
+    //     const email = req.body.email;
+    //     const userQuery = { email };
+    //     const updateUser = {
+    //       $set: {
+    //         role: "user",
+    //       },
+    //     };
+    //     const userResult = await usersCollection.updateOne(
+    //       userQuery,
+    //       updateUser,
+    //     );
+    //   }
+    //   res.send(result);
+    // });
+
     app.patch("/riders/:id", verifyFBToken, async (req, res) => {
-      const status = req.body.status;
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          status: status,
-        },
-      };
-      const result = await ridersCollection.updateOne(query, updateDoc);
-      if (status === "approved") {
-        const email = req.body.email;
-        const userQuery = { email };
-        const updateUser = {
-          $set: {
-            role: 'rider'
-          }
+      try {
+        const status = req.body.status;
+        const id = req.params.id;
+
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: { status: status },
+        };
+
+        const result = await ridersCollection.updateOne(query, updateDoc);
+
+        // role determine
+        let role = null;
+        if (status === "approved") role = "rider";
+        if (status === "rejected") role = "user";
+
+        let userResult = null;
+
+        // update user role (single জায়গায়)
+        if (role) {
+          userResult = await usersCollection.updateOne(
+            { email: req.body.email },
+            { $set: { role } },
+          );
         }
-        const userResult = await usersCollection.updateOne(userQuery, updateUser)
+
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Something went wrong" });
       }
-      res.send(result);
     });
 
     app.delete("/riders/:id", async (req, res) => {
