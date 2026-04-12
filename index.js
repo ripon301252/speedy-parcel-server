@@ -85,6 +85,15 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/users/:id", async (req, res) => {});
+
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ role: user?.role || "user" });
+    });
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       user.role = "user";
@@ -100,18 +109,18 @@ async function run() {
       res.send(result);
     });
 
-    app.patch('/users/:id', async (req, res)=>{
+    app.patch("/users/:id", async (req, res) => {
       const id = req.params.id;
       const roleInfo = req.body;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const updateDoc = {
-        $set:{
-          role: roleInfo.role
-        }
-      }
+        $set: {
+          role: roleInfo.role,
+        },
+      };
       const result = await usersCollection.updateOne(query, updateDoc);
-      res.send (result)
-    })
+      res.send(result);
+    });
 
     // =============================================================================
     // parcel api
@@ -173,7 +182,9 @@ async function run() {
       rider.createdAt = new Date();
 
       const email = rider.riderEmail;
-      const existingRider = await ridersCollection.findOne({ riderEmail: email,});
+      const existingRider = await ridersCollection.findOne({
+        riderEmail: email,
+      });
       if (existingRider) {
         return res.send({ message: "User already exists" });
       }
