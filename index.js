@@ -69,6 +69,20 @@ async function run() {
     const paymentsCollection = database.collection("payments");
     const ridersCollection = database.collection("riders");
 
+    // middle admin before allowing admin activity
+    // must be used after verifyFBToken middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query)
+
+      if(!user || user.role !== 'admin'){
+        return res.status(403).send({message: 'forbidden access'})
+      }
+
+      next();
+    };
+
     // ============================================================================
     // users related apis
     app.get("/users", verifyFBToken, async (req, res) => {
@@ -109,25 +123,30 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/users/:id", async (req, res) => {
-      const id = req.params.id;
-      const roleInfo = req.body;
-      const query = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          role: roleInfo.role,
-        },
-      };
-      const result = await usersCollection.updateOne(query, updateDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/users/:id/role",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const roleInfo = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            role: roleInfo.role,
+          },
+        };
+        const result = await usersCollection.updateOne(query, updateDoc);
+        res.send(result);
+      },
+    );
 
-    app.delete('/users/:id', async (req, res)=> {
+    app.delete("/users/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
       res.send(result);
-    })
+    });
 
     // =============================================================================
     // parcel api
@@ -266,7 +285,7 @@ async function run() {
     //   res.send(result);
     // });
 
-    app.patch("/riders/:id", verifyFBToken, async (req, res) => {
+    app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
         const status = req.body.status;
         const id = req.params.id;
@@ -452,9 +471,9 @@ async function run() {
 
     app.delete("/payment-history/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await paymentsCollection.deleteOne(query);
-      res.send(result)
+      res.send(result);
     });
 
     //=============================================================================
