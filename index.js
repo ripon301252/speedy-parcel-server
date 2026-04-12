@@ -122,6 +122,13 @@ async function run() {
       res.send(result);
     });
 
+    app.delete('/users/:id', async (req, res)=> {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    })
+
     // =============================================================================
     // parcel api
     app.get("/parcels", async (req, res) => {
