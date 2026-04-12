@@ -443,6 +443,13 @@ async function run() {
       res.send(result);
     });
 
+    app.delete("/payment-history/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await paymentsCollection.deleteOne(query);
+      res.send(result)
+    });
+
     //=============================================================================
     // OTP related apis
     const otpStore = {};
