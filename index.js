@@ -170,10 +170,17 @@ async function run() {
     // parcel api
     app.get("/parcels", async (req, res) => {
       const query = {};
-      const { email } = req.query;
+
+      const { email, deliveryStatus } = req.query;
+
       if (email) {
         query.senderEmail = email;
       }
+
+      if (deliveryStatus) {
+        query.deliveryStatus = deliveryStatus;
+      }
+
       const options = { sort: { createdAt: -1 } };
       const cursor = parcelsCollection.find(query, options);
       const result = await cursor.toArray();
@@ -194,6 +201,34 @@ async function run() {
       res.send(result);
     });
 
+    app.patch("/parcels/:id", async (req, res) => {
+      const { riderId, riderName, riderEmail, parcelId } = req.body;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const updateDoc = {
+        $set: {
+          deliveryStatus: "driver_assigned",
+          riderId: riderId,
+          riderName: riderName,
+          riderEmail: riderEmail,
+        },
+      };
+
+      const result = await parcelsCollection.updateOne(query, updateDoc);
+
+      // update rider information
+      const riderQuery = { _id: new ObjectId(riderId) };
+      const riderUpdatedDoc = {
+        $set: {
+          workStatus: 'in_delivery'
+        },
+      };
+      const riderResult = await ridersCollection.updateOne(riderQuery, riderUpdatedDoc)
+
+      res.send(riderResult);
+    });
+
     app.delete("/parcels/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -203,32 +238,74 @@ async function run() {
     // ==============================================================================
     // riders api
     app.get("/riders", verifyFBToken, verifyAdmin, async (req, res) => {
-      const { email, status, searchText } = req.query;
+      try {
+        const {
+          email,
+          status,
+          searchText,
+          riderDistrict,
+          riderArea,
+          workStatus,
+        } = req.query;
 
-      let query = {};
+        let query = {};
 
-      if (email) {
-        query.riderEmail = email;
+        // Email filter
+        if (email && email !== "") {
+          query.riderEmail = email;
+        }
+
+        // Status filter (IMPORTANT FIX)
+        if (status && status !== "") {
+          if (status === "pending") {
+            // pending = no status OR pending
+            query.$or = [{ status: { $exists: false } }, { status: "pending" }];
+          } else {
+            query.status = status;
+          }
+        }
+
+        // Search filter (merge safely)
+        if (searchText && searchText !== "") {
+          const searchQuery = {
+            $or: [
+              { riderName: { $regex: searchText, $options: "i" } },
+              { riderEmail: { $regex: searchText, $options: "i" } },
+            ],
+          };
+
+          // merge with existing query
+          query = {
+            $and: [query, searchQuery],
+          };
+        }
+
+        if (riderDistrict) {
+          query.riderDistrict = { $regex: riderDistrict, $options: "i" };
+        }
+
+        if (riderArea) {
+          query.riderArea = { $regex: riderArea, $options: "i" };
+        }
+
+        if (workStatus) {
+          query.workStatus = { $regex: workStatus, $options: "i" };
+        }
+
+        const options = {
+          sort: { createdAt: -1 },
+        };
+
+        const result = await ridersCollection
+          .find(query, options)
+          .limit(10)
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).send({ message: "Server error" });
       }
-      
-      if (status) {
-        query.status = status;
-      }
-
-      if (searchText) {
-        query.$or = [
-          { riderName: { $regex: searchText, $options: "i" } },
-          { riderEmail: { $regex: searchText, $options: "i" } },
-        ];
-      }
-
-      const options = { sort: { createdAt: -1 } };
-
-      const result = await ridersCollection
-        .find(query, options)
-        .limit(10)
-        .toArray();
-      res.send(result);
     });
 
     app.post("/riders", async (req, res) => {
@@ -280,6 +357,7 @@ async function run() {
       const updateDoc = {
         $set: {
           status: status,
+          workStatus: "available",
         },
       };
       const result = await ridersCollection.updateOne(query, updateDoc);
@@ -321,7 +399,11 @@ async function run() {
 
     //     const query = { _id: new ObjectId(id) };
     //     const updateDoc = {
-    //       $set: { status: status },
+    //       $set: {
+    //          status: status,
+    //          workStatus: 'available'
+    //        }
+
     //     };
 
     //     const result = await ridersCollection.updateOne(query, updateDoc);
@@ -441,6 +523,7 @@ async function run() {
         const update = {
           $set: {
             paymentStatus: "paid",
+            deliveryStatus: "pending-pickup",
             trackingId: trackingId,
           },
         };
