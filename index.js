@@ -74,10 +74,10 @@ async function run() {
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded_email;
       const query = { email };
-      const user = await usersCollection.findOne(query)
+      const user = await usersCollection.findOne(query);
 
-      if(!user || user.role !== 'admin'){
-        return res.status(403).send({message: 'forbidden access'})
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
       }
 
       next();
@@ -86,20 +86,38 @@ async function run() {
     // ============================================================================
     // users related apis
     app.get("/users", verifyFBToken, async (req, res) => {
-      const query = {};
-      const { email } = req.query;
+      const { searchText, email, role } = req.query;
+
+      let query = {};
 
       if (email) {
-        query.email = email; // ✅ correct field
+        query.email = email;
+      }
+
+      if (searchText) {
+        query = {
+          $or: [
+            { name: { $regex: searchText, $options: "i" } },
+            { email: { $regex: searchText, $options: "i" } },
+          ],
+        };
+      }
+
+      if (role) {
+        query.role = role;
       }
 
       const options = { sort: { createdAt: -1 } };
-      const result = await usersCollection.find(query, options).toArray();
+
+      const result = await usersCollection
+        .find(query, options)
+        .limit(10)
+        .toArray();
 
       res.send(result);
     });
 
-    app.get("/users/:id", async (req, res) => {});
+    // app.get("/users/:id", async (req, res) => {});
 
     app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
@@ -184,21 +202,32 @@ async function run() {
     });
     // ==============================================================================
     // riders api
-    app.get("/riders", async (req, res) => {
-      const query = {};
-      const { email, status } = req.query;
+    app.get("/riders", verifyFBToken, verifyAdmin, async (req, res) => {
+      const { email, status, searchText } = req.query;
+
+      let query = {};
 
       if (email) {
         query.riderEmail = email;
       }
-
+      
       if (status) {
-        query.status = status; // e.g. pending, approved
+        query.status = status;
+      }
+
+      if (searchText) {
+        query.$or = [
+          { riderName: { $regex: searchText, $options: "i" } },
+          { riderEmail: { $regex: searchText, $options: "i" } },
+        ];
       }
 
       const options = { sort: { createdAt: -1 } };
 
-      const result = await ridersCollection.find(query, options).toArray();
+      const result = await ridersCollection
+        .find(query, options)
+        .limit(10)
+        .toArray();
       res.send(result);
     });
 
@@ -244,80 +273,80 @@ async function run() {
     //   }
     // });
 
-    // app.patch("/riders/:id", verifyFBToken, async (req, res) => {
-    //   const status = req.body.status;
-    //   const id = req.params.id;
-    //   const query = { _id: new ObjectId(id) };
-    //   const updateDoc = {
-    //     $set: {
-    //       status: status,
-    //     },
-    //   };
-    //   const result = await ridersCollection.updateOne(query, updateDoc);
-
-    //   if (status === "approved") {
-    //     const email = req.body.email;
-    //     const userQuery = { email };
-    //     const updateUser = {
-    //       $set: {
-    //         role: "rider",
-    //       },
-    //     };
-    //     const userResult = await usersCollection.updateOne(
-    //       userQuery,
-    //       updateUser,
-    //     );
-    //   }
-
-    //   if (status === "rejected") {
-    //     const email = req.body.email;
-    //     const userQuery = { email };
-    //     const updateUser = {
-    //       $set: {
-    //         role: "user",
-    //       },
-    //     };
-    //     const userResult = await usersCollection.updateOne(
-    //       userQuery,
-    //       updateUser,
-    //     );
-    //   }
-    //   res.send(result);
-    // });
-
     app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
-      try {
-        const status = req.body.status;
-        const id = req.params.id;
+      const status = req.body.status;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: status,
+        },
+      };
+      const result = await ridersCollection.updateOne(query, updateDoc);
 
-        const query = { _id: new ObjectId(id) };
-        const updateDoc = {
-          $set: { status: status },
+      if (status === "approved") {
+        const email = req.body.email;
+        const userQuery = { email };
+        const updateUser = {
+          $set: {
+            role: "rider",
+          },
         };
-
-        const result = await ridersCollection.updateOne(query, updateDoc);
-
-        // role determine
-        let role = null;
-        if (status === "approved") role = "rider";
-        if (status === "rejected") role = "user";
-
-        let userResult = null;
-
-        // update user role (single জায়গায়)
-        if (role) {
-          userResult = await usersCollection.updateOne(
-            { email: req.body.email },
-            { $set: { role } },
-          );
-        }
-
-        res.send(result);
-      } catch (error) {
-        console.error(error);
-        res.status(500).send({ error: "Something went wrong" });
+        const userResult = await usersCollection.updateOne(
+          userQuery,
+          updateUser,
+        );
       }
+
+      if (status === "rejected") {
+        const email = req.body.email;
+        const userQuery = { email };
+        const updateUser = {
+          $set: {
+            role: "user",
+          },
+        };
+        const userResult = await usersCollection.updateOne(
+          userQuery,
+          updateUser,
+        );
+      }
+      res.send(result);
     });
+
+    // app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+    //   try {
+    //     const status = req.body.status;
+    //     const id = req.params.id;
+
+    //     const query = { _id: new ObjectId(id) };
+    //     const updateDoc = {
+    //       $set: { status: status },
+    //     };
+
+    //     const result = await ridersCollection.updateOne(query, updateDoc);
+
+    //     // role determine
+    //     let role = null;
+    //     if (status === "approved") role = "rider";
+    //     if (status === "rejected") role = "user";
+
+    //     let userResult = null;
+
+    //     // update user role (single জায়গায়)
+    //     if (role) {
+    //       userResult = await usersCollection.updateOne(
+    //         { email: req.body.email },
+    //         { $set: { role } },
+    //       );
+    //     }
+
+    //     res.send(result);
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send({ error: "Something went wrong" });
+    //   }
+    // });
 
     app.delete("/riders/:id", async (req, res) => {
       const id = req.params.id;
