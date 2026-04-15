@@ -188,7 +188,7 @@ async function run() {
     });
 
     app.get('/parcels/rider', async (req, res)=>{
-      const {riderEmail, deliveryStatus} = req.query;
+      const {riderEmail, deliveryStatus, } = req.query;
       const query = {};
 
       if(riderEmail){
@@ -196,7 +196,7 @@ async function run() {
       }
 
       if(deliveryStatus){
-        query.deliveryStatus = {$in: ['driver_assigned', "rider_accepted"]}
+        query.deliveryStatus = {$in: ['driver_assigned', "rider_accepted"]} 
       }
       
       
