@@ -16,6 +16,7 @@ admin.initializeApp({
 
 // Tracking ID generator
 const crypto = require("crypto");
+const { create } = require("domain");
 function generateTrackingId() {
   const prefix = "PRCL";
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // e.g., 20260402
@@ -84,16 +85,43 @@ async function run() {
       next();
     };
 
+    // verify rider
+    const verifyRider = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "rider") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      next();
+    };
+
+    // verify role
+    // const verifyRole = (role) => {
+    //   return async (req, res, next) => {
+    //     const email = req.decoded_email;
+    //     const user = await usersCollection.findOne({ email });
+
+    //     if (!user || user.role !== role) {
+    //       return res.status(403).send({ message: "forbidden access" });
+    //     }
+
+    //     next();
+    //   };
+    // };
+
     const logTracking = async (trackingId, status) => {
       const log = {
         trackingId,
         status,
-        details: status.split('_').join(' '),
-        createdAt: new Date()
-      }
+        details: status.split("_").join(" "),
+        createdAt: new Date(),
+      };
       const result = await trackingsCollection.insertOne(log);
       return result;
-    }
+    };
 
     // ============================================================================
     // users related apis
@@ -171,7 +199,7 @@ async function run() {
       },
     );
 
-    app.delete("/users/:id", async (req, res) => {
+    app.delete("/users/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
@@ -199,7 +227,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/parcels/rider", async (req, res) => {
+    app.get("/parcels/rider", verifyFBToken, verifyRider, async (req, res) => {
       const { riderEmail, deliveryStatus } = req.query;
       const query = {};
 
@@ -215,8 +243,7 @@ async function run() {
       if (deliveryStatus !== "parcel_delivered") {
         // query.deliveryStatus = {$in: ['driver_assigned', "rider_accepted"]}
         query.deliveryStatus = { $nin: ["parcel_delivered", "rider_rejected"] };
-      }
-      else{
+      } else {
         query.deliveryStatus = deliveryStatus;
       }
 
@@ -234,11 +261,11 @@ async function run() {
 
     app.post("/parcels", async (req, res) => {
       const parcel = req.body;
-      const trackingId = generateTrackingId();  // new
+      const trackingId = generateTrackingId(); // new
 
       parcel.createdAt = new Date();
-      parcel.trackingId = trackingId // new
-      logTracking(trackingId, 'parcel_created') // new
+      parcel.trackingId = trackingId; // new
+      logTracking(trackingId, "parcel_created"); // new
 
       const result = await parcelsCollection.insertOne(parcel);
       res.send(result);
@@ -274,42 +301,45 @@ async function run() {
       );
 
       // logTracking
-      logTracking(trackingId, "driver_assigned")
+      logTracking(trackingId, "driver_assigned");
 
       res.send(riderResult);
     });
 
-    app.patch("/parcels/:id/deliveryStatus", async (req, res) => {
-      const { deliveryStatus, riderId, trackingId } = req.body;
-      const query = { _id: new ObjectId(req.params.id) };
-      const updatedDoc = {
-        $set: {
-          deliveryStatus: deliveryStatus,
-        },
-      };
-
-      if (deliveryStatus === "parcel_delivered") {
-        // update rider information
-        const riderQuery = { _id: new ObjectId(riderId) };
-        const riderUpdatedDoc = {
+    app.patch(
+      "/parcels/:id/deliveryStatus",
+      verifyFBToken,
+      verifyRider,
+      async (req, res) => {
+        const { deliveryStatus, riderId, trackingId } = req.body;
+        const query = { _id: new ObjectId(req.params.id) };
+        const updatedDoc = {
           $set: {
-            workStatus: "available",
+            deliveryStatus: deliveryStatus,
           },
         };
-        const riderResult = await ridersCollection.updateOne(
-          riderQuery,
-          riderUpdatedDoc,
-        );
-      }
 
+        if (deliveryStatus === "parcel_delivered") {
+          // update rider information
+          const riderQuery = { _id: new ObjectId(riderId) };
+          const riderUpdatedDoc = {
+            $set: {
+              workStatus: "available",
+            },
+          };
+          const riderResult = await ridersCollection.updateOne(
+            riderQuery,
+            riderUpdatedDoc,
+          );
+        }
 
+        const result = await parcelsCollection.updateOne(query, updatedDoc);
+        // logTracking
+        logTracking(trackingId, deliveryStatus);
 
-      const result = await parcelsCollection.updateOne(query, updatedDoc);
-      // logTracking
-      logTracking(trackingId, deliveryStatus)
-
-      res.send(result);
-    });
+        res.send(result);
+      },
+    );
 
     app.delete("/parcels/:id", async (req, res) => {
       const id = req.params.id;
@@ -564,7 +594,7 @@ async function run() {
           senderName: paymentInfo.senderName,
           senderAddress: paymentInfo.senderAddress,
           senderPhoto: paymentInfo.senderPhoto,
-          trackingId: paymentInfo.trackingId // new
+          trackingId: paymentInfo.trackingId, // new
         },
         customer_email: paymentInfo.senderEmail, // new me
 
@@ -635,9 +665,9 @@ async function run() {
 
         if (session.payment_status === "paid") {
           // const resultPayment = await paymentsCollection.insertOne(payment);
-          logTracking(trackingId, "pending-pickup")
+          logTracking(trackingId, "pending-pickup");
 
-         return res.send({
+          return res.send({
             success: true,
             modifyParcel: result,
             trackingId: trackingId,
@@ -647,10 +677,8 @@ async function run() {
           });
         }
       }
-      return res.send({success: false });
+      return res.send({ success: false });
     });
-
-
 
     app.get("/payment-history", verifyFBToken, async (req, res) => {
       const email = req.query.email;
@@ -735,12 +763,57 @@ async function run() {
 
     //=============================================================================
     // tracking related api
-    app.get('/trackings/:trackingId/logs', async (req, res)=>{
+    app.get("/trackings/:trackingId/logs", async (req, res) => {
       const trackingId = req.params.trackingId;
-      const query = {trackingId};
+      const query = { trackingId };
       const cursor = await trackingsCollection.find(query).toArray();
       res.send(cursor);
-    })
+    });
+    //=============================================================================
+
+    // cash out related api
+
+    app.get("/cash-outs", async (req, res) => {
+      const result = await database
+        .collection("cash-outs")
+        .find()
+        .sort({ createdAt: -1 }) // ✅ newest first
+        .toArray();
+
+      res.send(result);
+    });
+
+    app.post("/cash-out", async (req, res) => {
+      try {
+        const { riderEmail, parcelId, amount } = req.body;
+
+        const existing = await database
+          .collection("cash-outs")
+          .findOne({ parcelId });
+
+        if (existing) {
+          return res.status(400).send({ message: "Already cashed out" });
+        }
+
+        const cash_out = {
+          riderEmail,
+          parcelId,
+          amount,
+          status: "pending",
+          createdAt: new Date(),
+        };
+
+        const result = await database
+          .collection("cash-outs")
+          .insertOne(cash_out);
+
+        res.send(result);
+      } catch (error) {
+        console.log("Cash-out Error:", error);
+        res.status(500).send({ message: "Cash-out failed" });
+      }
+    });
+
     //=============================================================================
 
     // Ping!
