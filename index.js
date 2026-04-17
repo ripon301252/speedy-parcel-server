@@ -70,6 +70,7 @@ async function run() {
     const paymentsCollection = database.collection("payments");
     const ridersCollection = database.collection("riders");
     const trackingsCollection = database.collection("trackings");
+    const cashOutCollection = database.collection("cashOut");
 
     // middle admin before allowing admin activity
     // must be used after verifyFBToken middleware
@@ -680,23 +681,119 @@ async function run() {
       return res.send({ success: false });
     });
 
+    // app.get("/payment-history", verifyFBToken, async (req, res) => {
+    //   const { email, page = 1, limit = 10 } = req.query;
+    //   const query = {};
+
+    //   if (email) {
+    //     if (email !== req.decoded_email) {
+    //       return res.status(403).send({ message: "forbidden access" });
+    //     }
+
+    //     query.customerEmail = email;
+    //   }
+
+    //   const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    //   const total = await paymentsCollection.countDocuments(query);
+
+    //   const cursor = paymentsCollection
+    //     .find(query)
+    //     .sort({ paidDate: -1 })
+    //     .skip(skip)
+    //     .limit(parseInt(limit));
+    //   const result = await cursor.toArray();
+    //   res.send({
+    //     data: result,
+    //     total,
+    //     page: parseInt(page),
+    //     totalPages: Math.ceil(total / limit),
+    //   });
+    // });
+
+    // app.get("/payment-history", verifyFBToken, async (req, res) => {
+    //   const { email, page = 1, limit = 10 } = req.query;
+
+    //   const decodedEmail = req.decoded_email;
+
+    //   const user = await usersCollection.findOne({ email: decodedEmail });
+    //   console.log("decoded", user)
+    //   const role = user?.role;
+    //   console.log(role)
+
+    //   const query = {};
+
+    //   const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    //   // ADMIN → সব দেখতে পারবে
+    //   if (role === "admin") {
+    //     if (email) {
+    //       query.customerEmail = email;
+    //     }
+    //   }
+    //   // USER → শুধু নিজের data
+    //   else {
+    //     query.customerEmail = decodedEmail;
+    //   }
+
+    //   console.log(email)
+
+    //   const total = await paymentsCollection.countDocuments(query);
+
+    //   const result = await paymentsCollection
+    //     .find(query)
+    //     .sort({ paidDate: -1 })
+    //     .skip(skip)
+    //     .limit(parseInt(limit))
+    //     .toArray();
+
+    //   res.send({
+    //     data: result,
+    //     total,
+    //     page: parseInt(page),
+    //     totalPages: Math.ceil(total / limit),
+    //   });
+    // });
+
     app.get("/payment-history", verifyFBToken, async (req, res) => {
-      const email = req.query.email;
+      const { email, page = 1, limit = 10 } = req.query;
+
+      const decodedEmail = req.decoded_email;
+
+      const user = await usersCollection.findOne({ email: decodedEmail });
+      const role = user?.role;
+      
+
       const query = {};
 
-      console.log("headers", req.headers);
+      const skip = (parseInt(page) - 1) * parseInt(limit);
 
-      if (email) {
-        query.customerEmail = email;
-
-        if (email !== req.decoded_email) {
-          return res.status(403).send({ message: "forbidden access" });
+      // 🔥 ADMIN → সব data
+      if (role === "admin") {
+        if (email) {
+          query.customerEmail = email;
         }
       }
+      // 🔥 USER → শুধু নিজের data
+      else {
+        query.customerEmail = decodedEmail;
+      }
 
-      const cursor = paymentsCollection.find(query).sort({ paidDate: -1 });
-      const result = await cursor.toArray();
-      res.send(result);
+      const total = await paymentsCollection.countDocuments(query);
+
+      const result = await paymentsCollection
+        .find(query)
+        .sort({ paidDate: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .toArray();
+
+      res.send({
+        data: result,
+        total,
+        page: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+      });
     });
 
     app.delete("/payment-history/:id", async (req, res) => {
@@ -771,47 +868,94 @@ async function run() {
     });
     //=============================================================================
 
-    // cash out related api
 
-    app.get("/cash-outs", async (req, res) => {
-      const result = await database
-        .collection("cash-outs")
-        .find()
-        .sort({ createdAt: -1 }) // ✅ newest first
+    app.get("/cash-out", verifyFBToken, async (req, res) => {
+      const { email, page = 1, limit = 10 } = req.query;
+      const decodedEmail = req.decoded_email;
+       const user = await usersCollection.findOne({ email: decodedEmail });
+       console.log(user)
+       const role = user?.role;
+        console.log(role)
+      const query = {};
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      if (role === "admin") {
+        if (email) {
+          query.riderEmail = email;
+        }
+      }
+      else{
+        query.riderEmail = decodedEmail;
+      }
+      console.log(role, email)
+
+      
+
+      const total = await cashOutCollection.countDocuments(query);
+
+      const result = await cashOutCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
         .toArray();
 
-      res.send(result);
+      res.send({
+        data: result,
+        total,
+        page: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+      });
     });
 
     app.post("/cash-out", async (req, res) => {
       try {
-        const { riderEmail, parcelId, amount } = req.body;
+        const {
+          riderEmail,
+          riderPhoto,
+          riderName,
+          parcelId,
+          amount,
+          riderDistrict,
+          riderArea,
+        } = req.body;
 
-        const existing = await database
-          .collection("cash-outs")
-          .findOne({ parcelId });
+        // const existing = await database.collection("cash-outs").findOne({ parcelId });
+        const existing = await cashOutCollection.findOne({ parcelId });
 
         if (existing) {
           return res.status(400).send({ message: "Already cashed out" });
         }
 
-        const cash_out = {
+        const cashOut = {
           riderEmail,
+          riderPhoto,
+          riderName,
+          riderDistrict,
+          riderArea,
           parcelId,
           amount,
+          transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           status: "pending",
           createdAt: new Date(),
         };
 
-        const result = await database
-          .collection("cash-outs")
-          .insertOne(cash_out);
+        // const result = await database.collection("cash-outs").insertOne(cash_out);
+        const result = await cashOutCollection.insertOne(cashOut);
 
         res.send(result);
       } catch (error) {
         console.log("Cash-out Error:", error);
         res.status(500).send({ message: "Cash-out failed" });
       }
+    });
+
+    app.delete("/cash-out/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const result = await cashOutCollection.deleteOne(query);
+      res.send(result);
     });
 
     //=============================================================================
