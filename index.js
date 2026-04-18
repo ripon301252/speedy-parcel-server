@@ -282,23 +282,20 @@ async function run() {
         query.riderEmail = riderEmail;
       }
 
-      // if (deliveryStatus) {
-      //   // query.deliveryStatus = {$in: ['driver_assigned', "rider_accepted"]}
-      //   query.deliveryStatus = { $nin: ["parcel_delivered", "rider_rejected"] };
-      // }
-
       if (deliveryStatus !== "parcel_delivered") {
         // query.deliveryStatus = {$in: ['driver_assigned', "rider_accepted"]}
         query.deliveryStatus = { $nin: ["parcel_delivered", "rider_rejected"] };
       } else {
         query.deliveryStatus = deliveryStatus;
       }
-
+      
+      
       const cursor = parcelsCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
     });
 
+    
     app.get("/parcels/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -319,7 +316,7 @@ async function run() {
     });
 
     // TODO: rename this to be specific like /parcels/:id/assign
-    app.patch("/parcels/:id", async (req, res) => {
+    app.patch("/parcels/:id/assign", async (req, res) => {
       const { riderId, riderName, riderEmail, trackingId, parcelId } = req.body;
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -394,7 +391,9 @@ async function run() {
       const result = await parcelsCollection.deleteOne(query);
       res.send(result);
     });
+
     // ==============================================================================
+
     // riders api
     app.get("/riders", verifyFBToken, verifyAdmin, async (req, res) => {
       try {
@@ -489,13 +488,12 @@ async function run() {
         riderEmail: email,
       });
       if (existingRider) {
-        return res.send({ message: "User already exists" });
+        return res.status(409).send({ message: "User already exists" });
       }
 
       const result = await ridersCollection.insertOne(rider);
       res.send(result);
     });
-
 
     app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       const status = req.body.status;
@@ -539,43 +537,6 @@ async function run() {
       res.send(result);
     });
 
-    // app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
-    //   try {
-    //     const status = req.body.status;
-    //     const id = req.params.id;
-
-    //     const query = { _id: new ObjectId(id) };
-    //     const updateDoc = {
-    //       $set: {
-    //          status: status,
-    //          workStatus: 'available'
-    //        }
-
-    //     };
-
-    //     const result = await ridersCollection.updateOne(query, updateDoc);
-
-    //     // role determine
-    //     let role = null;
-    //     if (status === "approved") role = "rider";
-    //     if (status === "rejected") role = "user";
-
-    //     let userResult = null;
-
-    //     // update user role (single জায়গায়)
-    //     if (role) {
-    //       userResult = await usersCollection.updateOne(
-    //         { email: req.body.email },
-    //         { $set: { role } },
-    //       );
-    //     }
-
-    //     res.send(result);
-    //   } catch (error) {
-    //     console.error(error);
-    //     res.status(500).send({ error: "Something went wrong" });
-    //   }
-    // });
 
     app.delete("/riders/:id", async (req, res) => {
       const id = req.params.id;
@@ -715,45 +676,7 @@ async function run() {
       return res.send({ success: false });
     });
 
-    // app.get("/payment-history", verifyFBToken, async (req, res) => {
-    //   const { email, page = 1, limit = 10 } = req.query;
-
-    //   const decodedEmail = req.decoded_email;
-
-    //   const user = await usersCollection.findOne({ email: decodedEmail });
-    //   const role = user?.role;
-
-    //   const query = {};
-
-    //   const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    //   // 🔥 ADMIN → সব data
-    //   if (role === "admin") {
-    //     if (email) {
-    //       query.customerEmail = email;
-    //     }
-    //   }
-    //   // 🔥 USER → শুধু নিজের data
-    //   else {
-    //     query.customerEmail = decodedEmail;
-    //   }
-
-    //   const total = await paymentsCollection.countDocuments(query);
-
-    //   const result = await paymentsCollection
-    //     .find(query)
-    //     .sort({ paidDate: -1 })
-    //     .skip(skip)
-    //     .limit(parseInt(limit))
-    //     .toArray();
-
-    //   res.send({
-    //     data: result,
-    //     total,
-    //     page: parseInt(page),
-    //     totalPages: Math.ceil(total / limit),
-    //   });
-    // });
+   
 
     app.get("/payment-history", verifyFBToken, async (req, res) => {
       const {
@@ -885,66 +808,6 @@ async function run() {
     });
     //=============================================================================
 
-    // app.get("/cash-out", verifyFBToken, async (req, res) => {
-    //   const { email, status, searchText, page = 1, limit = 10 } = req.query;
-    //   const decodedEmail = req.decoded_email;
-    //   const user = await usersCollection.findOne({ email: decodedEmail });
-    //   console.log(user);
-    //   const role = user?.role;
-    //   console.log(role);
-    //   let query = {};
-    //   const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    //   if (role === "admin") {
-    //     if (email) {
-    //       query.riderEmail = email;
-    //     }
-    //   } else {
-    //     query.riderEmail = decodedEmail;
-    //   }
-    //   console.log(role, email);
-
-    //   // Status filter (IMPORTANT FIX)
-    //   if (status && status !== "") {
-    //     if (status === "pending") {
-    //       // pending = no status OR pending
-    //       query.$or = [{ status: { $exists: false } }, { status: "pending" }];
-    //     } else {
-    //       query.status = status;
-    //     }
-    //   }
-
-    //   // Search filter (merge safely)
-    //     if (searchText && searchText !== "") {
-    //       const searchQuery = {
-    //         $or: [
-    //           { riderName: { $regex: searchText, $options: "i" } },
-    //           { riderEmail: { $regex: searchText, $options: "i" } },
-    //         ],
-    //       };
-
-    //     // merge with existing query
-    //       query = {
-    //         $and: [query, searchQuery],
-    //       };
-    //     }
-
-    //   const total = await cashOutCollection.countDocuments(query);
-
-    //   const result = await cashOutCollection
-    //     .find(query)
-    //     .sort({ createdAt: -1 })
-    //     .skip(skip)
-    //     .limit(parseInt(limit))
-    //     .toArray();
-
-    //   res.send({
-    //     data: result,
-    //     total,
-    //     page: parseInt(page),
-    //     totalPages: Math.ceil(total / limit),
-    //   });
-    // });
 
     app.get("/cash-out", verifyFBToken, async (req, res) => {
       try {
@@ -1081,20 +944,19 @@ async function run() {
       }
     });
 
-    app.patch("/cash-out/reject/:id", async (req, res) => {
+    app.patch('/cash-out/reject/:id', async (req, res) =>{
       const id = req.params.id;
-
       const result = await cashOutCollection.updateOne(
         { _id: new ObjectId(id) },
-        {
-          $set: {
-            status: "rejected",
+          {
+            $set: {
+              status: "rejected",
+              approvedAt: new Date(),
+            },
           },
-        },
-      );
-
-      res.send(result);
-    });
+      )
+      res.send(result)
+    })
 
     app.delete("/cash-out/:id", async (req, res) => {
       const id = req.params.id;
