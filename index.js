@@ -275,12 +275,17 @@ async function run() {
     });
 
     app.get("/parcels/rider", verifyFBToken, verifyRider, async (req, res) => {
-      const { riderEmail, deliveryStatus } = req.query;
+      const { riderEmail, deliveryStatus, page = 1, limit = 10 } = req.query;
+
       const query = {};
 
       if (riderEmail) {
         query.riderEmail = riderEmail;
       }
+
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      const total = await parcelsCollection.countDocuments(query);
 
       if (deliveryStatus !== "parcel_delivered") {
         // query.deliveryStatus = {$in: ['driver_assigned', "rider_accepted"]}
@@ -288,14 +293,24 @@ async function run() {
       } else {
         query.deliveryStatus = deliveryStatus;
       }
-      
-      
-      const cursor = parcelsCollection.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
+
+      // const cursor = parcelsCollection.find(query);
+      // const result = await cursor.toArray();
+      const result = await parcelsCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .toArray();
+
+      res.send({
+        data: result,
+        total,
+        page: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+      });
     });
 
-    
     app.get("/parcels/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -537,7 +552,6 @@ async function run() {
       res.send(result);
     });
 
-
     app.delete("/riders/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -660,7 +674,6 @@ async function run() {
         const resultPayment = await paymentsCollection.insertOne(payment);
 
         if (session.payment_status === "paid") {
-          // const resultPayment = await paymentsCollection.insertOne(payment);
           logTracking(trackingId, "pending-pickup");
 
           return res.send({
@@ -675,8 +688,6 @@ async function run() {
       }
       return res.send({ success: false });
     });
-
-   
 
     app.get("/payment-history", verifyFBToken, async (req, res) => {
       const {
@@ -807,7 +818,6 @@ async function run() {
       res.send(cursor);
     });
     //=============================================================================
-
 
     app.get("/cash-out", verifyFBToken, async (req, res) => {
       try {
@@ -944,19 +954,19 @@ async function run() {
       }
     });
 
-    app.patch('/cash-out/reject/:id', async (req, res) =>{
+    app.patch("/cash-out/reject/:id", async (req, res) => {
       const id = req.params.id;
       const result = await cashOutCollection.updateOne(
         { _id: new ObjectId(id) },
-          {
-            $set: {
-              status: "rejected",
-              approvedAt: new Date(),
-            },
+        {
+          $set: {
+            status: "rejected",
+            approvedAt: new Date(),
           },
-      )
-      res.send(result)
-    })
+        },
+      );
+      res.send(result);
+    });
 
     app.delete("/cash-out/:id", async (req, res) => {
       const id = req.params.id;
@@ -964,6 +974,55 @@ async function run() {
 
       const result = await cashOutCollection.deleteOne(query);
       res.send(result);
+    });
+
+    // charts
+    //  PIE chart: users role
+    app.get("/api/dashboard/pie", async (req, res) => {
+      try {
+        const data = await usersCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$role", // role
+                count: { $sum: 1 },
+              },
+            },
+          ])
+          .toArray();
+        res.json(data);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to get pie chart data" });
+      }
+    });
+
+    // Bar chart
+    app.get("/api/dashboard/bar", async (req, res) => {
+      try {
+        const data = await parcelsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$senderDistrict",
+                parcelNames: { $push: "$parcelName" },
+                count: { $sum: 1 },
+                totalCost: { $sum: "$cost" },
+                totalWeight: { $sum: { $toDouble: "$parcelWeight" } },
+                avgCost: { $avg: "$cost" },
+              },
+            },
+            {
+              $sort: { count: -1 }, // 🔥 top first
+            },
+          ])
+          .toArray();
+
+        res.json(data);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to get bar chart data" });
+      }
     });
 
     //=============================================================================
