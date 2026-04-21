@@ -811,12 +811,29 @@ async function run() {
 
     //=============================================================================
     // tracking related api
+
+    app.get("/trackings", async (req, res) => {
+      const cursor = await trackingsCollection.find().toArray();
+      res.send(cursor);
+    });
+
     app.get("/trackings/:trackingId/logs", async (req, res) => {
       const trackingId = req.params.trackingId;
       const query = { trackingId };
       const cursor = await trackingsCollection.find(query).toArray();
       res.send(cursor);
     });
+
+    app.delete("/trackings/:id", async (req, res) => {
+      const id = req.params.id;
+
+      const result = await trackingsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      res.send(result);
+    });
+
     //=============================================================================
 
     app.get("/cash-out", verifyFBToken, async (req, res) => {
@@ -975,6 +992,8 @@ async function run() {
       const result = await cashOutCollection.deleteOne(query);
       res.send(result);
     });
+
+    //=============================================================================
 
     // charts
     //  PIE chart: users role
