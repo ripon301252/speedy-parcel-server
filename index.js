@@ -9,7 +9,9 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // fire-base admin
 const admin = require("firebase-admin");
-const serviceAccount = require("./speedy-parcel-firebase-adminsdk.json");
+const serviceAccount = JSON.parse(
+  Buffer.from(process.env.FIREBASE_SERVICE_KEY, "base64").toString("utf-8")
+);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
