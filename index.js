@@ -1,4 +1,6 @@
 require("dotenv").config();
+console.log("EMAIL =", process.env.EMAIL);
+console.log("PASS =", process.env.EMAIL_PASS);
 const express = require("express");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
@@ -768,38 +770,104 @@ async function run() {
     // OTP related apis
     const otpStore = {};
     // nodemailer ==========
+    // const transporter = nodemailer.createTransport({
+    //   service: "gmail",
+    //   auth: {
+    //     user: process.env.EMAIL, // তোমার gmail
+    //     pass: process.env.EMAIL_PASS, // gmail app password
+    //   },
+    // });
+
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: {
-        user: process.env.EMAIL, // তোমার gmail
-        pass: process.env.EMAIL_PASS, // gmail app password
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASS,
       },
     });
 
+    transporter.verify((error, success) => {
+      if (error) {
+        console.log("SMTP ERROR:", error);
+      } else {
+        console.log("SMTP READY");
+      }
+    });
+
     // Send OTP
+    // app.post("/send-otp", async (req, res) => {
+    //   const { email } = req.body;
+
+    //   if (!email) return res.status(400).send({ message: "Email is required" });
+
+    //   const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit
+    //   otpStore[email] = {
+    //     code: otp,
+    //     expire: Date.now() + 5 * 60 * 1000, // 5 min
+    //   };
+
+    //   try {
+    //     await transporter.sendMail({
+    //       from: process.env.EMAIL,
+    //       to: email,
+    //       subject: "Your OTP Code",
+    //       html: `<h2>Your OTP Code</h2><h1>${otp}</h1><p>This code will expire in 5 minutes</p>`,
+    //     });
+
+    //     // console.log("OTP sent to:", email, otp); // debug
+    //     res.send({ success: true, message: "OTP sent" });
+    //   } catch (err) {
+    //     // console.log(err);
+    //     console.error("OTP EMAIL ERROR:", err);
+    //     res.status(500).send({ message: "Failed to send OTP" });
+    //   }
+    // });
+
+    app.get("/test-mail", async (req, res) => {
+      try {
+        const info = await transporter.sendMail({
+          from: process.env.EMAIL,
+          to: process.env.EMAIL,
+          subject: "Test",
+          text: "Hello",
+        });
+
+        res.send(info);
+      } catch (err) {
+        console.log("TEST MAIL ERROR:", err);
+        res.status(500).send(err.message);
+      }
+    });
+
     app.post("/send-otp", async (req, res) => {
       const { email } = req.body;
 
-      if (!email) return res.status(400).send({ message: "Email is required" });
+      if (!email) {
+        return res.status(400).send({ message: "Email is required" });
+      }
 
-      const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit
+      const otp = Math.floor(100000 + Math.random() * 900000);
+
       otpStore[email] = {
         code: otp,
-        expire: Date.now() + 5 * 60 * 1000, // 5 min
+        expire: Date.now() + 5 * 60 * 1000,
       };
 
       try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
           from: process.env.EMAIL,
           to: email,
-          subject: "Your OTP Code",
-          html: `<h2>Your OTP Code</h2><h1>${otp}</h1><p>This code will expire in 5 minutes</p>`,
+          subject: "OTP Code",
+          html: `<h1>${otp}</h1>`,
         });
 
-        // console.log("OTP sent to:", email, otp); // debug
+        console.log("✅ EMAIL SENT:", info.messageId);
+
         res.send({ success: true, message: "OTP sent" });
       } catch (err) {
-        // console.log(err);
+        console.error("❌ FULL ERROR:", err);
         res.status(500).send({ message: "Failed to send OTP" });
       }
     });
