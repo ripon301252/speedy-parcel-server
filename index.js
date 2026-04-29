@@ -10,7 +10,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 // fire-base admin
 const admin = require("firebase-admin");
 const serviceAccount = JSON.parse(
-  Buffer.from(process.env.FIREBASE_SERVICE_KEY, "base64").toString("utf-8")
+  Buffer.from(process.env.FIREBASE_SERVICE_KEY, "base64").toString("utf-8"),
 );
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -579,12 +579,12 @@ async function run() {
       res.send(result);
     });
 
-    app.delete('/reviews/:id', async(req, res)=>{
+    app.delete("/reviews/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
-      const result = await reviewsCollection.deleteOne(query)
+      const query = { _id: new ObjectId(id) };
+      const result = await reviewsCollection.deleteOne(query);
       res.send(result);
-    })
+    });
 
     // ============================================================================
     // stripe payment api
@@ -796,10 +796,10 @@ async function run() {
           html: `<h2>Your OTP Code</h2><h1>${otp}</h1><p>This code will expire in 5 minutes</p>`,
         });
 
-        console.log("OTP sent to:", email, otp); // debug
+        // console.log("OTP sent to:", email, otp); // debug
         res.send({ success: true, message: "OTP sent" });
       } catch (err) {
-        console.log(err);
+        // console.log(err);
         res.status(500).send({ message: "Failed to send OTP" });
       }
     });
