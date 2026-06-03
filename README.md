@@ -97,13 +97,8 @@ npm run dev
 
 **Mahfuzur Rahman**
 
-* GitHub: https://github.com/your-username
-* LinkedIn: https://linkedin.com/in/your-profile
+* GitHub: https://github.com/ripon301252
+* LinkedIn: https://www.linkedin.com/in/mahfuzur-rahman-280471392/
 
 ---
 
-## ⭐ Support
-
-If you find this project useful, give it a ⭐ on GitHub!
-
----
