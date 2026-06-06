@@ -768,7 +768,7 @@ async function run() {
 
     //=============================================================================
     // OTP related apis
-    const otpStore = {};
+    // const otpStore = {};
     // nodemailer ==========
     // const transporter = nodemailer.createTransport({
     //   service: "gmail",
@@ -778,64 +778,64 @@ async function run() {
     //   },
     // });
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL,
-        pass: process.env.EMAIL_PASS,
-      },
-      debug: true,
-      logger: true,
-    });
+    // const transporter = nodemailer.createTransport({
+    //   service: "gmail",
+    //   auth: {
+    //     user: process.env.EMAIL,
+    //     pass: process.env.EMAIL_PASS,
+    //   },
+    //   debug: true,
+    //   logger: true,
+    // });
 
     // Send OTP
-    app.post("/send-otp", async (req, res) => {
-      const { email } = req.body;
+    // app.post("/send-otp", async (req, res) => {
+    //   const { email } = req.body;
 
-      if (!email) return res.status(400).send({ message: "Email is required" });
+    //   if (!email) return res.status(400).send({ message: "Email is required" });
 
-      const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit
+    //   const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit
 
-      console.log("SEND OTP API HIT");
-      console.log("OTP sending to:", email);
-      console.log("OTP:", otp);
+    //   console.log("SEND OTP API HIT");
+    //   console.log("OTP sending to:", email);
+    //   console.log("OTP:", otp);
 
-      otpStore[email] = {
-        code: otp,
-        expire: Date.now() + 5 * 60 * 1000, // 5 min
-      };
+    //   otpStore[email] = {
+    //     code: otp,
+    //     expire: Date.now() + 5 * 60 * 1000, // 5 min
+    //   };
 
-      try {
-        await transporter.sendMail({
-          from: process.env.EMAIL,
-          to: email,
-          subject: "Your OTP Code",
-          html: `<h2>Your OTP Code</h2><h1>${otp}</h1><p>This code will expire in 5 minutes</p>`,
-        });
+    //   try {
+    //     await transporter.sendMail({
+    //       from: process.env.EMAIL,
+    //       to: email,
+    //       subject: "Your OTP Code",
+    //       html: `<h2>Your OTP Code</h2><h1>${otp}</h1><p>This code will expire in 5 minutes</p>`,
+    //     });
 
-        // console.log("OTP sent to:", email, otp); // debug
-        res.send({ success: true, message: "OTP sent" });
-      } catch (err) {
-        // console.log(err);
-        console.error("OTP EMAIL ERROR:", err);
-        res.status(500).send({ message: "Failed to send OTP" });
-      }
-    });
+    //     // console.log("OTP sent to:", email, otp); // debug
+    //     res.send({ success: true, message: "OTP sent" });
+    //   } catch (err) {
+    //     // console.log(err);
+    //     console.error("OTP EMAIL ERROR:", err);
+    //     res.status(500).send({ message: "Failed to send OTP" });
+    //   }
+    // });
 
     // // Verify OTP
-    app.post("/verify-otp", (req, res) => {
-      const { email, otp } = req.body;
-      const stored = otpStore[email];
+    // app.post("/verify-otp", (req, res) => {
+    //   const { email, otp } = req.body;
+    //   const stored = otpStore[email];
 
-      if (!stored) return res.status(400).send({ message: "No OTP found" });
-      if (stored.expire < Date.now())
-        return res.status(400).send({ message: "OTP expired" });
-      if (stored.code !== Number(otp))
-        return res.status(400).send({ message: "Invalid OTP" });
+    //   if (!stored) return res.status(400).send({ message: "No OTP found" });
+    //   if (stored.expire < Date.now())
+    //     return res.status(400).send({ message: "OTP expired" });
+    //   if (stored.code !== Number(otp))
+    //     return res.status(400).send({ message: "Invalid OTP" });
 
-      delete otpStore[email];
-      res.send({ success: true, message: "OTP Verified" });
-    });
+    //   delete otpStore[email];
+    //   res.send({ success: true, message: "OTP Verified" });
+    // });
 
     //=============================================================================
     // tracking related api
